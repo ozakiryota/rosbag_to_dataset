@@ -35,9 +35,9 @@ RUN apt-get update && \
 		ros-noetic-pcl-conversions \
 		ros-noetic-rviz \
 		nlohmann-json3-dev
-	# cd ~/catkin_ws/src && \
-	# git clone https://github.com/ozakiryota/rosbag_to_dataset.git && \
-	# cd ~/catkin_ws && \
-	# /bin/bash -c "source /opt/ros/noetic/setup.bash; catkin_make"
+	cd ~/catkin_ws/src && \
+	git clone https://github.com/ozakiryota/rosbag_to_dataset.git && \
+	cd ~/catkin_ws && \
+	/bin/bash -c "source /opt/ros/noetic/setup.bash; catkin_make"
 ########## Initial position ##########
 WORKDIR /root/catkin_ws/src/rosbag_to_dataset
