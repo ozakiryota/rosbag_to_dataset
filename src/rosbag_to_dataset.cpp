@@ -131,7 +131,10 @@ void RosbagToDataset::createDirectory()
 		std::cout << "Cannot open " << save_txt_path_ << std::endl;
 		exit(true);
 	}
-    param_txt << rosbag_path_ << std::endl;
+    param_txt << "rosbag_path_ = " << rosbag_path_ << std::endl
+        << "min_time_diff_sec_ = " << min_time_diff_sec_ << std::endl
+        << "min_odom_diff_m_ = " << min_odom_diff_m_ << std::endl
+        << "min_odom_diff_deg_ = " << min_odom_diff_deg_ << std::endl;
 	param_txt.close();
 }
 
