@@ -10,8 +10,8 @@
 		<param name="rosbag_path" type="string" value="$(arg rosbag_dir)/$(arg rosbag_name).bag"/>
 		<param name="save_dir" type="string" value="$(find rosbag_to_dataset)/save/$(arg rosbag_name)"/>
 		<param name="debug_hz" type="double" value="10.0"/>
-		<!-- <param name="min_time_diff_sec" type="double" value="1.0"/> -->
+		<param name="min_time_diff_sec" type="double" value="1.0"/>
 		<!-- <param name="min_odom_diff_m" type="double" value="1.0"/> -->
-		<param name="min_odom_diff_deg" type="double" value="30.0"/>
+		<!-- <param name="min_odom_diff_deg" type="double" value="30.0"/> -->
 	</node>
 </launch>

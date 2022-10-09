@@ -225,13 +225,7 @@ void RosbagToDataset::getOdomDiff(float& largest_diff_m, float& largest_diff_deg
     tf::Quaternion curr_q, last_q;
     quaternionMsgToTF(odom_ptr_->pose.pose.orientation, curr_q);
     quaternionMsgToTF(last_saved_odom_.pose.pose.orientation, last_q);
-    double curr_roll, curr_pitch, curr_yaw, last_roll, last_pitch, last_yaw;
-	tf::Matrix3x3(curr_q).getRPY(curr_roll, curr_pitch, curr_yaw);
-	tf::Matrix3x3(last_q).getRPY(last_roll, last_pitch, last_yaw);
-    float diff_roll = std::abs(anglePiToPi(curr_roll - last_roll));
-    float diff_pitch = std::abs(anglePiToPi(curr_pitch - last_pitch));
-    float diff_yaw = std::abs(anglePiToPi(curr_yaw - last_yaw));
-    largest_diff_deg = std::max(std::max(diff_roll, diff_pitch), diff_yaw) / M_PI * 180.0;
+    largest_diff_deg = last_q.angleShortestPath(curr_q) / M_PI * 180.0;
 }
 
 void RosbagToDataset::save()
