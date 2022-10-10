@@ -1,6 +1,6 @@
 <launch>
-	<arg name="rosbag_dir" default="$(env HOME)/rosbag/airsim/drone_1cam_lidar16"/>
-	<arg name="rosbag_name" default="2022-10-08-15-50-34"/>
+	<arg name="rosbag_dir" default="$(env HOME)/rosbag/airsim/drone_2cam_lidar16"/>
+	<arg name="rosbag_name" default="2022-10-09-12-58-54"/>
 
 	<!-- rviz -->
 	<node pkg="rviz" type="rviz" name="rviz" args="-d $(find rosbag_to_dataset)/rviz_config/debug.rviz"/>
@@ -13,5 +13,10 @@
 		<param name="min_time_diff_sec" type="double" value="1.0"/>
 		<!-- <param name="min_odom_diff_m" type="double" value="1.0"/> -->
 		<!-- <param name="min_odom_diff_deg" type="double" value="30.0"/> -->
+		<param name="topic_0" type="string" value="/airsim_node/drone/Camera0/Scene/compressed"/>
+		<param name="topic_1" type="string" value="/airsim_node/drone/Camera90/Scene/compressed"/>
+		<param name="topic_2" type="string" value="/airsim_node/drone/lidar/LidarCustom"/>
+		<param name="topic_3" type="string" value="/airsim_node/drone/imu/Imu"/>
+		<param name="topic_4" type="string" value="/airsim_node/drone/odom_local_ned"/>
 	</node>
 </launch>
