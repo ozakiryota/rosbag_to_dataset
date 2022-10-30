@@ -22,28 +22,35 @@ class RosbagToDataset{
 		/*node handle*/
 		ros::NodeHandle nh_;
 		ros::NodeHandle nh_private_;
-        /*publisher*/
-		ros::Publisher image_pub_;
-		ros::Publisher pc_pub_;
-		ros::Publisher imu_pub_;
-		ros::Publisher odom_pub_;
         /*buffer*/
+        std::vector<std::string> topic_name_list_;
         size_t num_save_ = 0;
         ros::Time last_saved_stamp_;
-        nav_msgs::Odometry curr_odom_;
         nav_msgs::Odometry last_odom_;
         /*file*/
         std::ofstream file_list_csv_;
         /*message*/
         struct Topic{
-            std::string msg_type;
+            std::string topic_name;
             bool is_buffered = false;
-            sensor_msgs::CompressedImageConstPtr image_ptr;
-            sensor_msgs::PointCloud2ConstPtr pc_ptr;
-            sensor_msgs::ImuConstPtr imu_ptr;
-            nav_msgs::OdometryConstPtr odom_ptr;
+            ros::Publisher debug_pub;
         };
-        std::vector<Topic> msg_ptr_list_;
+        struct CompressedImageTopic : Topic{
+            sensor_msgs::CompressedImageConstPtr msg_ptr;
+        };
+        struct PcTopic : Topic{
+            sensor_msgs::PointCloud2ConstPtr msg_ptr;
+        };
+        struct ImuTopic : Topic{
+            sensor_msgs::ImuConstPtr msg_ptr;
+        };
+        struct OdomTopic : Topic{
+            nav_msgs::OdometryConstPtr msg_ptr;
+        };
+        std::vector<CompressedImageTopic> compressedimage_topic_list_;
+        std::vector<PcTopic> pc_topic_list_;
+        std::vector<ImuTopic> imu_topic_list_;
+        OdomTopic odom_topic_;
 		/*parameter*/
 		std::string rosbag_path_;
 		std::string save_dir_;
@@ -54,19 +61,18 @@ class RosbagToDataset{
         float min_odom_diff_deg_;
         float debug_hz_;
 		std::string debug_frame_;
-        std::vector<std::string> topic_name_list_;
         /*function*/
         std::string getDefaultSaveDir();
+        void getTopicList();
         bool isReadyToSave(const rosbag::View::iterator& view_itr);
-        void getOdomDiff(float& largest_diff_m, float& largest_diff_deg);
+        void getOdomDiff(float& diff_m, float& diff_deg);
 		void save();
 		void publishDebugMsg();
-        float anglePiToPi(const float& angle);
 
 	public:
 		RosbagToDataset();
         void createDirectory();
-        void load();
+        void execute();
 };
 
 RosbagToDataset::RosbagToDataset()
@@ -99,19 +105,7 @@ RosbagToDataset::RosbagToDataset()
     nh_private_.param("debug_frame", debug_frame_, std::string("debug"));
 	std::cout << "debug_frame_ = " << debug_frame_ << std::endl;
 
-    for(size_t i = 0; ; i++){
-        std::string tmp_topic_name;
-        if(!nh_private_.getParam("topic_" + std::to_string(i), tmp_topic_name))  break;
-        topic_name_list_.push_back(tmp_topic_name);
-        std::cout << "topic_name_list_[" << i << "] = " << topic_name_list_[i] << std::endl;
-    }
-    msg_ptr_list_.resize(topic_name_list_.size());
-
-    /*publisher*/
-	image_pub_ = nh_.advertise<sensor_msgs::CompressedImage>("/debug/image/compressed", 1);
-	pc_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/debug/point_cloud", 1);
-	imu_pub_ = nh_.advertise<sensor_msgs::Imu>("/debug/imu", 1);
-	odom_pub_ = nh_.advertise<nav_msgs::Odometry>("/debug/odom", 1);
+    getTopicList();
 }
 
 std::string RosbagToDataset::getDefaultSaveDir()
@@ -124,6 +118,39 @@ std::string RosbagToDataset::getDefaultSaveDir()
     }
     save_path += std::string("/src/rosbag_to_dataset/save/") + rosbag_path_;
     return save_path;
+}
+
+void RosbagToDataset::getTopicList()
+{
+    for(size_t i = 0; ; i++){
+        CompressedImageTopic tmp_topic;
+        if(!nh_private_.getParam("compressedimage_" + std::to_string(i), tmp_topic.topic_name))  break;
+        tmp_topic.debug_pub = nh_.advertise<sensor_msgs::CompressedImage>(tmp_topic.topic_name, 1);;
+        compressedimage_topic_list_.push_back(tmp_topic);
+        topic_name_list_.push_back(tmp_topic.topic_name);
+        std::cout << "compressedimage_topic_list_[" << i << "].topic_name = " << compressedimage_topic_list_[i].topic_name << std::endl;
+    }
+    for(size_t i = 0; ; i++){
+        PcTopic tmp_topic;
+        if(!nh_private_.getParam("pc_" + std::to_string(i), tmp_topic.topic_name))  break;
+        tmp_topic.debug_pub = nh_.advertise<sensor_msgs::PointCloud2>(tmp_topic.topic_name, 1);;
+        pc_topic_list_.push_back(tmp_topic);
+        topic_name_list_.push_back(tmp_topic.topic_name);
+        std::cout << "pc_topic_list_[" << i << "].topic_name = " << pc_topic_list_[i].topic_name << std::endl;
+    }
+    for(size_t i = 0; ; i++){
+        ImuTopic tmp_topic;
+        if(!nh_private_.getParam("imu_" + std::to_string(i), tmp_topic.topic_name))  break;
+        tmp_topic.debug_pub = nh_.advertise<sensor_msgs::Imu>(tmp_topic.topic_name, 1);;
+        imu_topic_list_.push_back(tmp_topic);
+        topic_name_list_.push_back(tmp_topic.topic_name);
+        std::cout << "imu_topic_list_[" << i << "].topic_name = " << imu_topic_list_[i].topic_name << std::endl;
+    }
+    if(nh_private_.getParam("odom", odom_topic_.topic_name)){
+        odom_topic_.debug_pub = nh_.advertise<nav_msgs::Odometry>(odom_topic_.topic_name, 1);;
+        topic_name_list_.push_back(odom_topic_.topic_name);
+        std::cout << "odom_topic_.topic_name = " << odom_topic_.topic_name << std::endl;
+    }
 }
 
 void RosbagToDataset::createDirectory()
@@ -150,7 +177,7 @@ void RosbagToDataset::createDirectory()
 	param_txt.close();
 }
 
-void RosbagToDataset::load()
+void RosbagToDataset::execute()
 {
     rosbag::Bag bag;
 
@@ -164,29 +191,50 @@ void RosbagToDataset::load()
 
     rosbag::View view(bag, rosbag::TopicQuery(topic_name_list_));
     rosbag::View::iterator view_itr;
-    view.addQuery(bag, rosbag::TypeQuery("tf2_msgs/TFMessage"));
     view_itr = view.begin();
 
     ros::Rate loop_rate(debug_hz_);
     while(view_itr != view.end()){
-        for(size_t i = 0; i < topic_name_list_.size(); i++){
-            if(view_itr->getTopic() == topic_name_list_[i]){
-                msg_ptr_list_[i].msg_type = view_itr->getDataType();
-                msg_ptr_list_[i].is_buffered = true;
-                msg_ptr_list_[i].image_ptr = view_itr->instantiate<sensor_msgs::CompressedImage>();
-                msg_ptr_list_[i].pc_ptr = view_itr->instantiate<sensor_msgs::PointCloud2>();
-                msg_ptr_list_[i].imu_ptr = view_itr->instantiate<sensor_msgs::Imu>();
-                msg_ptr_list_[i].odom_ptr = view_itr->instantiate<nav_msgs::Odometry>();
-                if(msg_ptr_list_[i].msg_type == "nav_msgs/Odometry")    curr_odom_ = *view_itr->instantiate<nav_msgs::Odometry>();
+        if(view_itr->getDataType() == "sensor_msgs/CompressedImage"){
+            for(CompressedImageTopic& topic : compressedimage_topic_list_){
+                if(view_itr->getTopic() == topic.topic_name){
+                    topic.msg_ptr = view_itr->instantiate<sensor_msgs::CompressedImage>();
+                    topic.is_buffered = true;
+                    break;
+                }
             }
         }
+        else if(view_itr->getDataType() == "sensor_msgs/PointCloud2"){
+            for(PcTopic& topic : pc_topic_list_){
+                if(view_itr->getTopic() == topic.topic_name){
+                    topic.msg_ptr = view_itr->instantiate<sensor_msgs::PointCloud2>();
+                    topic.is_buffered = true;
+                    break;
+                }
+            }
+        }
+        else if(view_itr->getDataType() == "sensor_msgs/Imu"){
+            for(ImuTopic& topic : imu_topic_list_){
+                if(view_itr->getTopic() == topic.topic_name){
+                    topic.msg_ptr = view_itr->instantiate<sensor_msgs::Imu>();
+                    topic.is_buffered = true;
+                    break;
+                }
+            }
+        }
+        else if(view_itr->getDataType() == "nav_msgs/Odometry"){
+            if(view_itr->getTopic() == odom_topic_.topic_name){
+                odom_topic_.msg_ptr = view_itr->instantiate<nav_msgs::Odometry>();
+                odom_topic_.is_buffered = true;
+            }
+        }
+
         if(isReadyToSave(view_itr)){
             save();
 
             last_saved_stamp_ = view_itr->getTime();
-            last_odom_ = curr_odom_;
+            if(odom_topic_.topic_name != "")    last_odom_ = *odom_topic_.msg_ptr;
             num_save_++;
-            for(size_t i = 0; i < msg_ptr_list_.size(); i++)    msg_ptr_list_[i].is_buffered = false;
 
             publishDebugMsg();
             if(debug_hz_ > 0)    loop_rate.sleep();
@@ -194,38 +242,54 @@ void RosbagToDataset::load()
         view_itr++;
     }
 
+    bag.close();
     file_list_csv_.close();
     std::cout << "Save: " << save_csv_path_ << std::endl;
 }
 
 bool RosbagToDataset::isReadyToSave(const rosbag::View::iterator& view_itr)
 {
-    for(size_t i = 0; i < msg_ptr_list_.size(); i++){
-        if(!msg_ptr_list_[i].is_buffered)    return false;
+    for(CompressedImageTopic& topic : compressedimage_topic_list_){
+        if(!topic.is_buffered)  return false;
     }
+    for(PcTopic& topic : pc_topic_list_){
+        if(!topic.is_buffered)  return false;
+    }
+    for(ImuTopic& topic : imu_topic_list_){
+        if(!topic.is_buffered)  return false;
+    }
+    if(odom_topic_.topic_name != ""){
+        if(!odom_topic_.is_buffered)  return false;
+    }
+
     if(num_save_ == 0)  return true;
+
     if(min_time_diff_sec_ > 0){
         if((view_itr->getTime() - last_saved_stamp_).toSec() < min_time_diff_sec_)  return false;
     }
-    float largest_diff_m, largest_diff_deg;
-    getOdomDiff(largest_diff_m, largest_diff_deg);
-    if(min_odom_diff_m_ > 0 && largest_diff_m < min_odom_diff_m_)   return false;
-    if(min_odom_diff_deg_ > 0 && largest_diff_deg < min_odom_diff_deg_)   return false;
+    if(odom_topic_.topic_name != ""){
+        float diff_m, diff_deg;
+        getOdomDiff(diff_m, diff_deg);
+        if(min_odom_diff_m_ > 0 && diff_m < min_odom_diff_m_)   return false;
+        if(min_odom_diff_deg_ > 0 && diff_deg < min_odom_diff_deg_)   return false;
+    }
 
     return true;
 }
 
-void RosbagToDataset::getOdomDiff(float& largest_diff_m, float& largest_diff_deg)
+void RosbagToDataset::getOdomDiff(float& diff_m, float& diff_deg)
 {
-    float diff_x = std::abs(curr_odom_.pose.pose.position.x - last_odom_.pose.pose.position.x);
-    float diff_y = std::abs(curr_odom_.pose.pose.position.y - last_odom_.pose.pose.position.y);
-    float diff_z = std::abs(curr_odom_.pose.pose.position.z - last_odom_.pose.pose.position.z);
-    largest_diff_m = std::max(std::max(diff_x, diff_y), diff_z);
+    const nav_msgs::Odometry& curr_odom_ = *odom_topic_.msg_ptr;
+
+    float diff_x = curr_odom_.pose.pose.position.x - last_odom_.pose.pose.position.x;
+    float diff_y = curr_odom_.pose.pose.position.y - last_odom_.pose.pose.position.y;
+    float diff_z = curr_odom_.pose.pose.position.z - last_odom_.pose.pose.position.z;
+    diff_m = std::sqrt(diff_x * diff_x + diff_y * diff_y + diff_z * diff_z);
 
     tf::Quaternion curr_q, last_q;
     quaternionMsgToTF(curr_odom_.pose.pose.orientation, curr_q);
     quaternionMsgToTF(last_odom_.pose.pose.orientation, last_q);
-    largest_diff_deg = last_q.angleShortestPath(curr_q) / M_PI * 180.0;
+    diff_deg = last_q.angleShortestPath(curr_q) / M_PI * 180.0;
 }
 
 void RosbagToDataset::save()
@@ -237,44 +301,54 @@ void RosbagToDataset::save()
     std::ofstream data_json(save_json_path);
     nlohmann::json json_data;
 
-    for(size_t i = 0; i < msg_ptr_list_.size(); i++){
-        std::string save_path = topic_name_list_[i];
+    for(CompressedImageTopic& topic : compressedimage_topic_list_){
+        std::string save_path = topic.topic_name;
         std::replace(save_path.begin() + 1, save_path.end(), '/', '_');
-        save_path = save_sub_dir + save_path;
-        if(msg_ptr_list_[i].msg_type == "sensor_msgs/CompressedImage"){
-            save_path += ".jpeg";
-            cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg_ptr_list_[i].image_ptr, sensor_msgs::image_encodings::BGR8);
-            cv::imwrite(save_path, cv_ptr->image);
-            file_list_csv_ << save_path << ",";
-            std::cout << "Save: " << save_path << std::endl;
-        }
-        else if(msg_ptr_list_[i].msg_type == "sensor_msgs/PointCloud2"){
-            save_path += ".pcd";
-            pcl::PointCloud<pcl::PointXYZI>::Ptr pcl_pc (new pcl::PointCloud<pcl::PointXYZI>);
-            pcl::fromROSMsg(*msg_ptr_list_[i].pc_ptr, *pcl_pc);
-            pcl::io::savePCDFileASCII(save_path, *pcl_pc);
-            file_list_csv_ << save_path << ",";
-            std::cout << "Save: " << save_path << std::endl;
-        }
-        else if(msg_ptr_list_[i].msg_type == "sensor_msgs/Imu"){
-            json_data[topic_name_list_[i]]["stamp"] = msg_ptr_list_[i].imu_ptr->header.stamp.toSec();
-            json_data[topic_name_list_[i]]["angular_velocity"]["x"] = msg_ptr_list_[i].imu_ptr->angular_velocity.x;
-            json_data[topic_name_list_[i]]["angular_velocity"]["y"] = msg_ptr_list_[i].imu_ptr->angular_velocity.y;
-            json_data[topic_name_list_[i]]["angular_velocity"]["z"] = msg_ptr_list_[i].imu_ptr->angular_velocity.z;
-            json_data[topic_name_list_[i]]["linear_acceleration"]["x"] = msg_ptr_list_[i].imu_ptr->linear_acceleration.x;
-            json_data[topic_name_list_[i]]["linear_acceleration"]["y"] = msg_ptr_list_[i].imu_ptr->linear_acceleration.y;
-            json_data[topic_name_list_[i]]["linear_acceleration"]["z"] = msg_ptr_list_[i].imu_ptr->linear_acceleration.z;
-        }
-        else if(msg_ptr_list_[i].msg_type == "nav_msgs/Odometry"){
-            json_data[topic_name_list_[i]]["stamp"] = msg_ptr_list_[i].odom_ptr->header.stamp.toSec();
-            json_data[topic_name_list_[i]]["position"]["x"] = msg_ptr_list_[i].odom_ptr->pose.pose.position.x;
-            json_data[topic_name_list_[i]]["position"]["y"] = msg_ptr_list_[i].odom_ptr->pose.pose.position.y;
-            json_data[topic_name_list_[i]]["position"]["z"] = msg_ptr_list_[i].odom_ptr->pose.pose.position.z;
-            json_data[topic_name_list_[i]]["orientation"]["x"] = msg_ptr_list_[i].odom_ptr->pose.pose.orientation.x;
-            json_data[topic_name_list_[i]]["orientation"]["y"] = msg_ptr_list_[i].odom_ptr->pose.pose.orientation.y;
-            json_data[topic_name_list_[i]]["orientation"]["z"] = msg_ptr_list_[i].odom_ptr->pose.pose.orientation.z;
-        }
+        save_path = save_sub_dir + save_path + ".jpeg";
+
+        cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(topic.msg_ptr, sensor_msgs::image_encodings::BGR8);
+        cv::imwrite(save_path, cv_ptr->image);
+        file_list_csv_ << save_path << ",";
+        std::cout << "Save: " << save_path << std::endl;
+
+        topic.is_buffered = false;
     }
+    for(PcTopic& topic : pc_topic_list_){
+        std::string save_path = topic.topic_name;
+        std::replace(save_path.begin() + 1, save_path.end(), '/', '_');
+        save_path = save_sub_dir + save_path + ".pcd";
+
+        pcl::PointCloud<pcl::PointXYZI>::Ptr pcl_pc (new pcl::PointCloud<pcl::PointXYZI>);
+        pcl::fromROSMsg(*topic.msg_ptr, *pcl_pc);
+        pcl::io::savePCDFileASCII(save_path, *pcl_pc);
+        file_list_csv_ << save_path << ",";
+        std::cout << "Save: " << save_path << std::endl;
+
+        topic.is_buffered = false;
+    }
+    for(ImuTopic& topic : imu_topic_list_){
+        json_data[topic.topic_name]["stamp"] = topic.msg_ptr->header.stamp.toSec();
+        json_data[topic.topic_name]["angular_velocity"]["x"] = topic.msg_ptr->angular_velocity.x;
+        json_data[topic.topic_name]["angular_velocity"]["y"] = topic.msg_ptr->angular_velocity.y;
+        json_data[topic.topic_name]["angular_velocity"]["z"] = topic.msg_ptr->angular_velocity.z;
+        json_data[topic.topic_name]["linear_acceleration"]["x"] = topic.msg_ptr->linear_acceleration.x;
+        json_data[topic.topic_name]["linear_acceleration"]["y"] = topic.msg_ptr->linear_acceleration.y;
+        json_data[topic.topic_name]["linear_acceleration"]["z"] = topic.msg_ptr->linear_acceleration.z;
+
+        topic.is_buffered = false;
+    }
+    if(odom_topic_.topic_name != ""){
+        json_data[odom_topic_.topic_name]["stamp"] = odom_topic_.msg_ptr->header.stamp.toSec();
+        json_data[odom_topic_.topic_name]["position"]["x"] = odom_topic_.msg_ptr->pose.pose.position.x;
+        json_data[odom_topic_.topic_name]["position"]["y"] = odom_topic_.msg_ptr->pose.pose.position.y;
+        json_data[odom_topic_.topic_name]["position"]["z"] = odom_topic_.msg_ptr->pose.pose.position.z;
+        json_data[odom_topic_.topic_name]["orientation"]["x"] = odom_topic_.msg_ptr->pose.pose.orientation.x;
+        json_data[odom_topic_.topic_name]["orientation"]["y"] = odom_topic_.msg_ptr->pose.pose.orientation.y;
+        json_data[odom_topic_.topic_name]["orientation"]["z"] = odom_topic_.msg_ptr->pose.pose.orientation.z;
+
+        odom_topic_.is_buffered = false;
+    }
+
     data_json << json_data;
     data_json.close();
     std::cout << "Save: " << save_json_path << std::endl;
@@ -283,33 +357,26 @@ void RosbagToDataset::save()
 
 void RosbagToDataset::publishDebugMsg()
 {
-    for(size_t i = 0; i < msg_ptr_list_.size(); i++){
-        if(msg_ptr_list_[i].msg_type == "sensor_msgs/CompressedImage"){
-            sensor_msgs::CompressedImage debug_image = *msg_ptr_list_[i].image_ptr;
-            debug_image.header.frame_id = debug_frame_;
-            image_pub_.publish(debug_image);
-        }
-        else if(msg_ptr_list_[i].msg_type == "sensor_msgs/PointCloud2"){
-            sensor_msgs::PointCloud2 debug_pc = *msg_ptr_list_[i].pc_ptr;
-            debug_pc.header.frame_id = debug_frame_;
-            pc_pub_.publish(debug_pc);
-        }
-        else if(msg_ptr_list_[i].msg_type == "sensor_msgs/Imu"){
-            sensor_msgs::Imu debug_imu = *msg_ptr_list_[i].imu_ptr;
-            debug_imu.header.frame_id = debug_frame_;
-            imu_pub_.publish(debug_imu);
-        }
-        else if(msg_ptr_list_[i].msg_type == "nav_msgs/Odometry"){
-            nav_msgs::Odometry debug_odom = *msg_ptr_list_[i].odom_ptr;
-            debug_odom.header.frame_id = debug_frame_;
-            odom_pub_.publish(debug_odom);
-        }
+    for(CompressedImageTopic& topic : compressedimage_topic_list_){
+        sensor_msgs::CompressedImage debug_msg = *topic.msg_ptr;
+        debug_msg.header.frame_id = debug_frame_;
+        topic.debug_pub.publish(debug_msg);
     }
-}
-
-float RosbagToDataset::anglePiToPi(const float& angle)
-{
-	return atan2(sin(angle), cos(angle)); 
+    for(PcTopic& topic : pc_topic_list_){
+        sensor_msgs::PointCloud2 debug_msg = *topic.msg_ptr;
+        debug_msg.header.frame_id = debug_frame_;
+        topic.debug_pub.publish(debug_msg);
+    }
+    for(ImuTopic& topic : imu_topic_list_){
+        sensor_msgs::Imu debug_msg = *topic.msg_ptr;
+        debug_msg.header.frame_id = debug_frame_;
+        topic.debug_pub.publish(debug_msg);
+    }
+    if(odom_topic_.topic_name != ""){
+        nav_msgs::Odometry debug_msg = *odom_topic_.msg_ptr;
+        debug_msg.header.frame_id = debug_frame_;
+        odom_topic_.debug_pub.publish(debug_msg);
+    }
 }
 
 int main(int argc, char** argv)
@@ -318,5 +385,5 @@ int main(int argc, char** argv)
 	
 	RosbagToDataset rosbag_to_dataset;
     rosbag_to_dataset.createDirectory();
-    rosbag_to_dataset.load();
+    rosbag_to_dataset.execute();
 }
