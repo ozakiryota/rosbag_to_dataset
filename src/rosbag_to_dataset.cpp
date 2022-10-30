@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <rosbag/bag.h>
 #include <rosbag/view.h>
+#include <sensor_msgs/Image.h>
 #include <sensor_msgs/CompressedImage.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/Imu.h>
@@ -35,6 +36,9 @@ class RosbagToDataset{
             bool is_buffered = false;
             ros::Publisher debug_pub;
         };
+        struct ImageTopic : Topic{
+            sensor_msgs::ImageConstPtr msg_ptr;
+        };
         struct CompressedImageTopic : Topic{
             sensor_msgs::CompressedImageConstPtr msg_ptr;
         };
@@ -47,6 +51,7 @@ class RosbagToDataset{
         struct OdomTopic : Topic{
             nav_msgs::OdometryConstPtr msg_ptr;
         };
+        std::vector<ImageTopic> image_topic_list_;
         std::vector<CompressedImageTopic> compressedimage_topic_list_;
         std::vector<PcTopic> pc_topic_list_;
         std::vector<ImuTopic> imu_topic_list_;
@@ -123,6 +128,14 @@ std::string RosbagToDataset::getDefaultSaveDir()
 void RosbagToDataset::getTopicList()
 {
     for(size_t i = 0; ; i++){
+        ImageTopic tmp_topic;
+        if(!nh_private_.getParam("image_" + std::to_string(i), tmp_topic.topic_name))  break;
+        tmp_topic.debug_pub = nh_.advertise<sensor_msgs::Image>(tmp_topic.topic_name, 1);;
+        image_topic_list_.push_back(tmp_topic);
+        topic_name_list_.push_back(tmp_topic.topic_name);
+        std::cout << "image_topic_list_[" << i << "].topic_name = " << image_topic_list_[i].topic_name << std::endl;
+    }
+    for(size_t i = 0; ; i++){
         CompressedImageTopic tmp_topic;
         if(!nh_private_.getParam("compressedimage_" + std::to_string(i), tmp_topic.topic_name))  break;
         tmp_topic.debug_pub = nh_.advertise<sensor_msgs::CompressedImage>(tmp_topic.topic_name, 1);;
@@ -195,7 +208,16 @@ void RosbagToDataset::execute()
 
     ros::Rate loop_rate(debug_hz_);
     while(view_itr != view.end()){
-        if(view_itr->getDataType() == "sensor_msgs/CompressedImage"){
+        if(view_itr->getDataType() == "sensor_msgs/Image"){
+            for(ImageTopic& topic : image_topic_list_){
+                if(view_itr->getTopic() == topic.topic_name){
+                    topic.msg_ptr = view_itr->instantiate<sensor_msgs::Image>();
+                    topic.is_buffered = true;
+                    break;
+                }
+            }
+        }
+        else if(view_itr->getDataType() == "sensor_msgs/CompressedImage"){
             for(CompressedImageTopic& topic : compressedimage_topic_list_){
                 if(view_itr->getTopic() == topic.topic_name){
                     topic.msg_ptr = view_itr->instantiate<sensor_msgs::CompressedImage>();
@@ -249,6 +271,9 @@ void RosbagToDataset::execute()
 
 bool RosbagToDataset::isReadyToSave(const rosbag::View::iterator& view_itr)
 {
+    for(ImageTopic& topic : image_topic_list_){
+        if(!topic.is_buffered)  return false;
+    }
     for(CompressedImageTopic& topic : compressedimage_topic_list_){
         if(!topic.is_buffered)  return false;
     }
@@ -301,6 +326,18 @@ void RosbagToDataset::save()
     std::ofstream data_json(save_json_path);
     nlohmann::json json_data;
 
+    for(ImageTopic& topic : image_topic_list_){
+        std::string save_path = topic.topic_name;
+        std::replace(save_path.begin() + 1, save_path.end(), '/', '_');
+        save_path = save_sub_dir + save_path + ".jpeg";
+
+        cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(topic.msg_ptr, topic.msg_ptr->encoding);
+        cv::imwrite(save_path, cv_ptr->image);
+        file_list_csv_ << save_path << ",";
+        std::cout << "Save: " << save_path << std::endl;
+
+        topic.is_buffered = false;
+    }
     for(CompressedImageTopic& topic : compressedimage_topic_list_){
         std::string save_path = topic.topic_name;
         std::replace(save_path.begin() + 1, save_path.end(), '/', '_');
@@ -357,6 +394,11 @@ void RosbagToDataset::save()
 
 void RosbagToDataset::publishDebugMsg()
 {
+    for(ImageTopic& topic : image_topic_list_){
+        sensor_msgs::Image debug_msg = *topic.msg_ptr;
+        debug_msg.header.frame_id = debug_frame_;
+        topic.debug_pub.publish(debug_msg);
+    }
     for(CompressedImageTopic& topic : compressedimage_topic_list_){
         sensor_msgs::CompressedImage debug_msg = *topic.msg_ptr;
         debug_msg.header.frame_id = debug_frame_;
