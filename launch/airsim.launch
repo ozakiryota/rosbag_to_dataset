@@ -1,7 +1,7 @@
 <launch>
 	<!-- parameter -->
 	<arg name="rosbag_dir" default="$(env HOME)/rosbag/airsim/drone_2cam_lidar16"/>
-	<arg name="rosbag_name" default="2022-10-10-13-32-27_transformed_projected"/>
+	<arg name="rosbag_name" default="2022-10-10-13-32-27_transformed_projected_converted"/>
 
 	<!-- main -->
 	<node pkg="rosbag_to_dataset" type="rosbag_to_dataset" name="rosbag_to_dataset" output="screen">
@@ -12,6 +12,7 @@
 		<!-- <param name="min_odom_diff_m" type="double" value="1.0"/> -->
 		<!-- <param name="min_odom_diff_deg" type="double" value="30.0"/> -->
 		<param name="image_0" type="string" value="/airsim_node/drone/Camera0/Scene/compressed/projected"/>
+		<param name="image_1" type="string" value="/airsim_node/drone/Camera0/Scene/compressed/depth/16uc1"/>
 		<param name="compressedimage_0" type="string" value="/airsim_node/drone/Camera0/Scene/compressed"/>
 		<param name="compressedimage_1" type="string" value="/airsim_node/drone/Camera90/Scene/compressed"/>
 		<param name="pc_0" type="string" value="/airsim_node/drone/lidar/LidarCustom"/>
