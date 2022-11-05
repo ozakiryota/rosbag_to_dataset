@@ -1,0 +1,23 @@
+<launch>
+	<!-- parameter -->
+	<arg name="rosbag_dir" default="$(env HOME)/rosbag/sq2_velodyne/dkan_outdoor"/>
+	<arg name="rosbag_name" default="2018-10-31-08-37-11_converted_transformed_projected"/>
+
+	<!-- main -->
+	<node pkg="rosbag_to_dataset" type="rosbag_to_dataset" name="rosbag_to_dataset" output="screen">
+		<param name="rosbag_path" type="string" value="$(arg rosbag_dir)/$(arg rosbag_name).bag"/>
+		<param name="save_dir" type="string" value="$(find rosbag_to_dataset)/save/$(arg rosbag_name)"/>
+		<!-- <param name="debug_hz" type="double" value="10.0"/> -->
+		<!-- <param name="min_time_diff_sec" type="double" value="1.0"/> -->
+		<!-- <param name="min_odom_diff_m" type="double" value="1.0"/> -->
+		<!-- <param name="min_odom_diff_deg" type="double" value="30.0"/> -->
+		<param name="image_0" type="string" value="/camera/color/image_raw/compressed/projected"/>
+		<param name="compressedimage_0" type="string" value="/camera/color/image_raw/compressed"/>
+		<param name="pc_0" type="string" value="/velodyne_points"/>
+		<param name="imu_0" type="string" value="/imu/data"/>
+		<param name="odom" type="string" value="/odom"/>
+	</node>
+
+	<!-- rviz -->
+	<node pkg="rviz" type="rviz" name="rviz" args="-d $(find rosbag_to_dataset)/rviz_config/velodyne.rviz"/>
+</launch>
