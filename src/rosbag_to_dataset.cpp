@@ -14,6 +14,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/io/ply_io.h>
 
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/opencv.hpp>
@@ -61,6 +62,7 @@ class RosbagToDataset{
 		std::string save_dir_;
 		std::string save_csv_path_;
 		std::string save_txt_path_;
+		std::string save_pc_filetype_;
         float min_time_diff_sec_;
         float min_odom_diff_m_;
         float min_odom_diff_deg_;
@@ -97,6 +99,9 @@ RosbagToDataset::RosbagToDataset()
 	std::cout << "save_csv_path_ = " << save_csv_path_ << std::endl;
     nh_private_.param("save_txt_path", save_txt_path_, std::string(save_dir_ + "/param.txt"));
 	std::cout << "save_txt_path_ = " << save_txt_path_ << std::endl;
+    nh_private_.param("save_pc_filetype", save_pc_filetype_, std::string("pcd"));
+    if(save_pc_filetype_ != "pcd" && save_pc_filetype_ != "ply")    save_pc_filetype_ = "pcd";
+	std::cout << "save_pc_filetype_ = " << save_pc_filetype_ << std::endl;
 
     nh_private_.param("min_time_diff_sec", min_time_diff_sec_, float(-1));
 	std::cout << "min_time_diff_sec_ = " << min_time_diff_sec_ << std::endl;
@@ -353,11 +358,12 @@ void RosbagToDataset::save()
     for(PcTopic& topic : pc_topic_list_){
         std::string save_path = topic.topic_name;
         std::replace(save_path.begin() + 1, save_path.end(), '/', '_');
-        save_path = save_sub_dir + save_path + ".pcd";
+        save_path = save_sub_dir + save_path + "." + save_pc_filetype_;
 
         pcl::PointCloud<pcl::PointXYZI>::Ptr pcl_pc (new pcl::PointCloud<pcl::PointXYZI>);
         pcl::fromROSMsg(*topic.msg_ptr, *pcl_pc);
-        pcl::io::savePCDFileASCII(save_path, *pcl_pc);
+        if(save_pc_filetype_ == "pcd")    pcl::io::savePCDFileASCII(save_path, *pcl_pc);
+        else if(save_pc_filetype_ == "ply") pcl::io::savePLYFileASCII(save_path, *pcl_pc);
         file_list_csv_ << save_path << ",";
         std::cout << "Save: " << save_path << std::endl;
 
