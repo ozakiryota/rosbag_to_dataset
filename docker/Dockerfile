@@ -33,8 +33,9 @@ RUN apt-get update && \
     apt-get install -y \
 		libpcl-dev \
 		ros-noetic-pcl-conversions \
+		ros-noetic-cv-bridge \
 		ros-noetic-rviz \
-		nlohmann-json3-dev
+		nlohmann-json3-dev && \
 	cd ~/catkin_ws/src && \
 	git clone https://github.com/ozakiryota/rosbag_to_dataset.git && \
 	cd ~/catkin_ws && \
