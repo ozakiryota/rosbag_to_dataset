@@ -41,6 +41,13 @@ target_link_libraries(rosbag_to_dataset
     ${OpenCV_LIBRARIES}
 )
 
+add_executable(rosbag_to_csv
+    src/rosbag_to_csv.cpp
+)
+target_link_libraries(rosbag_to_csv
+    ${catkin_LIBRARIES}
+)
+
 #############
 ## Install ##
 #############

@@ -1,0 +1,13 @@
+<launch>
+	<!-- parameter -->
+	<arg name="rosbag_dir" default="$(env HOME)/rosbag/sq2_velodyne/dkan_outdoor"/>
+	<arg name="rosbag_name" default="2018-10-31-08-37-11"/>
+
+	<!-- main -->
+	<node pkg="rosbag_to_dataset" type="rosbag_to_csv" name="rosbag_to_csv" output="screen">
+		<param name="read_rosbag_path" type="string" value="$(arg rosbag_dir)/$(arg rosbag_name).bag"/>
+		<param name="write_csv_path" type="string" value="$(find rosbag_to_dataset)/save/$(arg rosbag_name).csv"/>
+		<param name="imu_0" type="string" value="/imu/data"/>
+		<param name="odom_0" type="string" value="/odom"/>
+	</node>
+</launch>
