@@ -153,6 +153,7 @@ void RosbagToCsv::execute()
                     if(topic.is_buffered)   writeData();
                     topic.msg_ptr = view_itr->instantiate<nav_msgs::Odometry>();
                     topic.is_buffered = true;
+                    buffered_clock_ = topic.msg_ptr->header.stamp;
                     break;
                 }
             }
@@ -163,6 +164,7 @@ void RosbagToCsv::execute()
                     if(topic.is_buffered)   writeData();
                     topic.msg_ptr = view_itr->instantiate<sensor_msgs::Imu>();
                     topic.is_buffered = true;
+                    buffered_clock_ = topic.msg_ptr->header.stamp;
                     break;
                 }
             }
@@ -171,7 +173,6 @@ void RosbagToCsv::execute()
             std::cerr << view_itr->getTopic() << " is not supported msg." << std::endl;
             continue;
         }
-        buffered_clock_ = view_itr->getTime();
         view_itr++;
     }
 
